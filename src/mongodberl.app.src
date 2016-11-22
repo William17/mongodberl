@@ -1,0 +1,12 @@
+{application, mongodberl,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { mongodberl_app, []}},
+  {env, []}
+ ]}.
