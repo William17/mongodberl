@@ -12,7 +12,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, get_value_from_mongo/3, get_doc_from_mongo/2, make_sure_binary/1]).
+-export([start_link/1, get_value_from_mongo/3, get_doc_from_mongo/2, update_doc_from_mongo/3, update_doc_from_mongo/4, run_cmd/2, find_one/3, make_sure_binary/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -30,6 +30,35 @@ get_value_from_mongo(PoolPid, Item, Key) ->
 
 get_doc_from_mongo(PoolPid, Key) ->
     execute(PoolPid, {get, Key}).
+
+% mongodberl:update_doc_from_mongo(mongodbpool, <<"56de9ea86a1501b43243c095">>, [{<<"incressid">>, {inc, 1}}]).
+update_doc_from_mongo(PoolPid, Key, Update) ->
+    execute(PoolPid, {update, Key, Update, []}).
+
+update_doc_from_mongo(PoolPid, Key, Update, Option) ->
+    execute(PoolPid, {update, Key, Update, Option}).
+
+find_one(PoolPid, Collection, Query) ->
+    execute(PoolPid, {findOne, Collection, Query}).
+
+% update exits document
+% mongodberl:run_cmd(pool_mongodb,[{"findandmodify", "apps"}, {"query",[{"_id",{oid, <<"56de9ea86a1501b43243c095">>}}]}, {"update", [{<<"incressid">>, {inc,1}}]}, {"new", 1}])
+% mongodb run cmd Result: [{<<"lastErrorObject">>,
+%                           [{<<"updatedExisting">>,true},{<<"n">>,1}]},
+%                          {<<"value">>,
+%                           [{<<"_id">>,{oid,<<"56de9ea86a1501b43243c095">>}},
+%                            {<<"incressid">>,12}]},
+%                          {<<"ok">>,1.0}]{true}
+
+% update not exits document
+% mongodberl:run_cmd(pool_mongodb,[{"findandmodify", "apps"}, {"query",[{"_id",{oid, <<"56de9ea86a1501b43243c096">>}}]}, {"update", [{<<"incressid">>, {inc,1}}]}, {"new", 1}]).
+% mongodb run cmd Result: [{<<"lastErrorObject">>,
+%                           [{<<"updatedExisting">>,false},{<<"n">>,0}]},
+%                          {<<"value">>,null},
+%                          {<<"ok">>,1.0}]{true}
+
+run_cmd(PoolPid, Option) ->
+    execute(PoolPid, {run_cmd, Option}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,6 +182,33 @@ execute(PoolPid, Cmd) ->
                         catch _:X ->
                             {false, <<"fail">>, X}
                         end;
+                    
+                    {findOne, Collection, Query} ->
+                        try
+                            Mongo:set_encode_style(mochijson),
+                            {ok, Doc} = Mongo:findOne(Collection, Query),
+                            {true, Doc}
+                        catch _:X ->
+                            {false, <<"fail">>, X}
+                        end;
+
+                    {update, Key, Update, Option} ->
+                        try
+                            Mongo:set_encode_style(mochijson),
+                            ok = Mongo:update("apps", [{"_id", {oid, make_sure_binary(Key)}}], Update, Option),
+                            {true}
+                        catch _:X ->
+                            {false, <<"fail">>, X}
+                        end;
+                    {run_cmd, Option} ->
+                        try
+                            Mongo:set_encode_style(mochijson),
+                            Result = Mongo:runCmd(Option),
+                            {true, Result}
+                        catch _:X ->
+                            {false, <<"fail">>, X}
+                        end;
+
                     _ ->
                         {false, <<"cmd_not_supported">>}
                 end;
